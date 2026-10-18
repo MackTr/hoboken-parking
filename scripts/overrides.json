@@ -1,0 +1,35 @@
+{
+  "street_aliases": {
+    "Henderson St.": {
+      "to": "Marin Blvd",
+      "why": "Henderson St is the old name of Marin Blvd. The GIS layer's Marin Blvd segment has the same Monday 1-2 pm, both-sides rule the schedule gives Henderson St."
+    },
+    "River Terrace": {
+      "to": "River St",
+      "why": "The GIS layer labels River Terrace as River St north of 5th St. Its geometry matches OpenStreetMap's River Terrace, and its Wed/Thu rules match the schedule's River Terrace rows."
+    }
+  },
+  "location_fixes": [
+    {
+      "street": "Newark St.",
+      "side": "North",
+      "location": "Washington St. to north boundary",
+      "use": "Washington St. to east boundary",
+      "why": "Newark St runs east-west, so 'north boundary' can only mean the east end. The GIS layer has the same Fri 8-9 am rule east of Washington St."
+    },
+    {
+      "street": "Clinton St.",
+      "side": "West",
+      "location": "Newark St. to Seventeenth St.",
+      "use": "Newark St. to north boundary",
+      "why": "17th St isn't in the GIS layer; Clinton St's segments end just north of 16th St."
+    },
+    {
+      "street": "Clinton St.",
+      "side": "East",
+      "location": "Newark St. to Seventeenth St.",
+      "use": "Newark St. to north boundary",
+      "why": "17th St isn't in the GIS layer; Clinton St's segments end just north of 16th St."
+    }
+  ]
+}

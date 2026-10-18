@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Hoboken Street Cleaning</title>
+  <meta name="description" content="Where you can park in Hoboken on a given day: street cleaning by curb side, city holidays, and temporary no-parking signs.">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div id="map" role="region" aria-label="Map of Hoboken street cleaning"></div>
+
+  <aside class="panel" id="panel">
+    <header class="panel-head">
+      <h1>Hoboken street cleaning</h1>
+      <button id="collapse-btn" class="link-btn" aria-expanded="true" aria-controls="panel-body">Hide</button>
+    </header>
+
+    <div id="panel-body" class="panel-body">
+      <div class="days" id="days" role="group" aria-label="Day"></div>
+
+      <div class="time-row">
+        <label for="time" class="time-label" id="time-text">--</label>
+        <input type="range" id="time" min="0" max="1425" step="15" aria-describedby="time-text">
+        <button id="now-btn" class="chip" type="button">Now</button>
+      </div>
+
+      <div id="banner" class="banner" role="status" hidden></div>
+      <p id="summary" class="summary" aria-live="polite"></p>
+
+      <ul class="legend">
+        <li><span class="sw now"></span>Cleaning now: don't park</li>
+        <li><span class="sw later"></span>Cleaning later this day</li>
+        <li><span class="sw clear"></span>No more cleaning this day</li>
+        <li><span class="sw none"></span>No schedule listed</li>
+        <li class="legend-signs">
+          <label><input type="checkbox" id="signs-toggle" checked>
+            <span class="sw-dot"></span>Temporary no-parking signs <span id="signs-count" class="muted"></span></label>
+        </li>
+      </ul>
+
+      <details class="about">
+        <summary>About this data</summary>
+        <ul>
+          <li>Curb schedules come from the city's
+            <a id="src-schedule" href="https://www.hobokennj.gov/resources/street-cleaning-schedule" target="_blank" rel="noopener">street cleaning schedule</a>,
+            placed on the city's GIS street map. Where the two disagree, the schedule page wins and the curb's popup says so.</li>
+          <li>Street cleaning is suspended on <a href="https://www.hobokennj.gov/holiday-schedule" target="_blank" rel="noopener">city holidays</a>.</li>
+          <li>Signs come from the city's <a href="https://hpuvp.hobokennj.gov/parking" target="_blank" rel="noopener">temporary no-parking map</a>. <span id="signs-source"></span></li>
+          <li id="built-at"></li>
+        </ul>
+      </details>
+
+      <p class="fine">Always check posted signs. Weather suspensions are announced on
+        <a href="https://local.nixle.com/city-of-hoboken-nj/" target="_blank" rel="noopener">Nixle</a>.</p>
+    </div>
+  </aside>
+</body>
+</html>

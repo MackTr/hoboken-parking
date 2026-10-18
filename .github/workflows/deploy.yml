@@ -1,0 +1,51 @@
+# Rebuilds the street cleaning data from the city every morning and publishes
+# the map to GitHub Pages. If the build fails (say the city's site is down or
+# its layout changed), nothing is deployed and the last good version stays up.
+name: Refresh data and deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 9 * * *" # 5 am Eastern (4 am in winter)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Rebuild data from the city
+        run: python scripts/build_data.py
+      - name: Summarize the build
+        run: sed -n '1,12p' data/build_report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Collect the site files
+        run: |
+          mkdir _site
+          cp index.html app.js style.css _site/
+          cp -r data _site/data
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
