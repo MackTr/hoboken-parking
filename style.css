@@ -120,3 +120,4 @@ a { color: var(--accent); }
   .legend { grid-template-columns: 1fr 1fr; column-gap: 10px; }
   .legend .legend-signs { grid-column: 1 / -1; }
 }
+.banner.error { background: #fef2f2; border-color: #fecaca; color: #991b1b; }

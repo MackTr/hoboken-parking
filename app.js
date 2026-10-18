@@ -334,11 +334,27 @@ function fitHoboken() {
   map.fitBounds([[-74.0440, 40.7360], [-74.0225, 40.7585]], { padding, duration: 0 });
 }
 
+// If the map can't start, say why in the panel instead of leaving it blank.
+function showFatal(err) {
+  console.error(err);
+  const msg = String((err && err.message) || err);
+  const banner = document.getElementById("banner");
+  banner.hidden = false;
+  banner.classList.add("error");
+  banner.textContent = typeof maplibregl === "undefined"
+    ? "The map library didn't load from unpkg.com. An ad blocker, extension or network filter may be blocking it."
+    : /webgl/i.test(msg)
+      ? "The map couldn't start because WebGL is off in this browser. In Chrome: Settings > System > turn on \u201cUse graphics acceleration when available\u201d, then relaunch."
+      : `The map couldn't start: ${msg}`;
+}
+
 async function init() {
   const now = hobokenNow();
   state.date = now.date;
   state.minutes = now.minutes;
+  renderControls(); // so the panel works (and has its real size) even if the map fails
 
+  if (typeof maplibregl === "undefined") throw new Error("maplibregl is not defined");
   map = new maplibregl.Map({
     container: "map",
     style: "https://tiles.openfreemap.org/styles/positron",
@@ -351,10 +367,11 @@ async function init() {
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "top-right");
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
   map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "top-right");
-  renderControls(); // so the panel has its real size before framing the map
   fitHoboken();
   // Our layers only need the style itself, not every basemap tile ("load").
   const mapReady = new Promise((resolve) => map.once("style.load", resolve));
+
+  map.on("error", (e) => console.warn("map:", e.error || e)); // tile hiccups shouldn't break the page
 
   const [geo, hol, meta] = await Promise.all([
     fetch("data/street_cleaning.geojson").then((r) => r.json()),
@@ -397,4 +414,4 @@ async function init() {
   loadSigns();
 }
 
-init();
+init().catch(showFatal);
