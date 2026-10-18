@@ -8,9 +8,12 @@ const COLORS = { now: "#dc2626", later: "#f59e0b", clear: "#16a34a", none: "#9ca
 const DAY = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const REASONS = { MOVING: "Moving", CONSTRUCTION: "Construction", EVENT: "Event", DELIVERY: "Delivery", FILMSHOOT: "Film shoot" };
 
-const state = { date: null, minutes: 0, live: true, showSigns: true };
+// mode "moment": one date and time. mode "trip": the car sits from trip.from
+// to trip.to (each {date, minutes}) and we look for any cleaning in between.
+const state = { mode: "moment", date: null, minutes: 0, live: true, showSigns: true, trip: null };
 let curbs = null;            // FeatureCollection sent to the map (id, side, status only)
 const curbProps = new Map(); // id -> full properties (rules, block, source)
+const curbCoords = new Map(); // id -> [lon, lat][]
 const holidays = new Map();  // "YYYY-MM-DD" -> name
 let signs = [];
 let map, popup;
@@ -83,6 +86,42 @@ function nextCleaning(rules, date, minutes) {
   return null;
 }
 
+// --------------------------------------------------------------- trip mode
+
+const MAX_TRIP_DAYS = 62;
+const tripValid = (t) => t.from.date < t.to.date || (t.from.date === t.to.date && t.from.minutes < t.to.minutes);
+const fmtWhen = (dt) => `${fmtDate(dt.date)}, ${fmtTime(dt.minutes)}`;
+
+// Each day of the trip (or of [first, last] within it) with the minutes the car is parked: [lo, hi).
+function* tripDays(t, first = t.from.date, last = t.to.date) {
+  for (let d = first, n = 0; d <= last && n < MAX_TRIP_DAYS; d = addDays(d, 1), n++) {
+    yield { date: d, lo: d === t.from.date ? t.from.minutes : 0, hi: d === t.to.date ? t.to.minutes : 1440 };
+  }
+}
+
+// The first cleaning window that falls while the car is parked, or null.
+function firstCleaningDuring(rules, t, { ignoreHolidays = false } = {}) {
+  for (const { date, lo, hi } of tripDays(t)) {
+    if (!ignoreHolidays && holidays.has(date)) continue;
+    const dow = isoDow(date);
+    const hit = rules
+      .filter((r) => r.days.includes(dow))
+      .map((r) => ({ s: toMin(r.start), e: toMin(r.end) }))
+      .filter((w) => w.e > lo && w.s < hi)
+      .sort((a, b) => a.s - b.s)[0];
+    if (hit) return { date, ...hit };
+  }
+  return null;
+}
+
+function tripStatus(rules, t) {
+  if (!rules.length) return "none";
+  return firstCleaningDuring(rules, t) ? "now" : "clear";
+}
+
+// Weekday city holidays inside the trip (the ones that skip a cleaning).
+const tripHolidays = (t) => [...tripDays(t)].filter((d) => holidays.has(d.date) && isoDow(d.date) <= 5).map((d) => d.date);
+
 // ------------------------------------------------------------------- signs
 
 const usDate = (s) => { const [m, d, y] = s.split("/"); return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`; };
@@ -97,6 +136,16 @@ function prepSign(s) {
 }
 const signOnDate = (s, date) => s.from <= date && date <= s.to;
 const signActiveAt = (s, minutes) => s.allDay || (minutes >= s.start && minutes < s.end);
+// First day a sign's no-parking hours overlap the trip, or null.
+function signDuringTrip(s, t) {
+  const first = s.from > t.from.date ? s.from : t.from.date;
+  const last = s.to < t.to.date ? s.to : t.to.date;
+  for (const { date, lo, hi } of tripDays(t, first, last)) {
+    const ws = s.allDay ? 0 : s.start, we = s.allDay ? 1440 : s.end;
+    if (we > lo && ws < hi) return date;
+  }
+  return null;
+}
 
 function titleCase(s) {
   return s.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()).replace(/(\d)(St|Nd|Rd|Th)\b/g, (m, d, x) => d + x.toLowerCase());
@@ -142,13 +191,31 @@ function relDay(off) {
   return off === 0 ? "today" : off === 1 ? "tomorrow" : `in ${off} days`;
 }
 
+const TRIP_STATUS_TEXT = { now: "Cleaning while you're away", clear: "Clear the whole time", none: "No schedule listed" };
+
+function tripRows(p) {
+  const t = state.trip;
+  if (!tripValid(t)) return `<div class="row">Pick a return time after you park.</div>`;
+  const hit = firstCleaningDuring(p.rules, t);
+  if (hit) {
+    return `<div class="row"><b>First cleaning:</b> ${fmtDate(hit.date)}, ${fmtRange(hit.s, hit.e)}. Move the car before ${fmtTime(hit.s)}.</div>`;
+  }
+  const saved = firstCleaningDuring(p.rules, t, { ignoreHolidays: true });
+  let html = `<div class="row">No cleaning from ${fmtWhen(t.from)} to ${fmtWhen(t.to)}.</div>`;
+  if (saved) html += `<div class="row">${esc(holidays.get(saved.date))} (${fmtDate(saved.date)}) skips this curb's cleaning: no street cleaning on city holidays.</div>`;
+  return html;
+}
+
 function curbPopup(p) {
-  const status = statusFor(p.rules, state.date, state.minutes);
+  const trip = state.mode === "trip";
+  const status = trip ? (tripValid(state.trip) ? tripStatus(p.rules, state.trip) : "none") : statusFor(p.rules, state.date, state.minutes);
   const side = p.side_name ? `${p.side_name} side` : "";
   const block = [p.from, p.to].filter((x) => x && x !== "end").join(" → ") || "";
-  let html = `<div class="pop"><span class="tag ${status}">${STATUS_TEXT[status]}</span>
+  let html = `<div class="pop"><span class="tag ${status}">${(trip ? TRIP_STATUS_TEXT : STATUS_TEXT)[status]}</span>
     <h3>${esc(p.street)}${side ? " · " + side : ""}</h3>${block ? `<p class="block">${esc(block)}</p>` : ""}`;
-  if (p.rules.length) {
+  if (p.rules.length && trip) {
+    html += `<div class="row"><b>Street cleaning:</b> ${p.rules.map(fmtRule).join("; ")}</div>` + tripRows(p);
+  } else if (p.rules.length) {
     html += `<div class="row"><b>Street cleaning:</b> ${p.rules.map(fmtRule).join("; ")}</div>`;
     const hol = holidays.get(state.date);
     if (hol) html += `<div class="row">No cleaning on ${fmtDate(state.date)}: ${esc(hol)}.</div>`;
@@ -170,11 +237,12 @@ function curbPopup(p) {
 }
 
 function signPopup(s) {
-  const active = signActiveAt(s, state.minutes);
+  const trip = state.mode === "trip";
+  const active = !trip && signActiveAt(s, state.minutes);
   const dates = s.from === s.to ? fmtDate(s.from) : `${fmtDate(s.from)} – ${fmtDate(s.to)}`;
   const hours = s.allDay ? "all day" : fmtRange(s.start, s.end);
-  const longTerm = s.to > addDays(state.date, 365);
-  return `<div class="pop"><span class="tag sign">No parking${active ? " now" : ""}</span>
+  const longTerm = s.to > addDays(trip ? state.trip.to.date : state.date, 365);
+  return `<div class="pop"><span class="tag sign">No parking${trip ? " during your trip" : active ? " now" : ""}</span>
     <h3>${esc(s.address)}</h3><p class="block">${esc(s.reason)}</p>
     <div class="row"><b>When:</b> ${longTerm ? `${hours}, ongoing` : `${dates}, ${hours}`}</div>
     <div class="src">Source: city temporary no-parking sign map. Vehicles in an active sign zone can be towed.</div></div>`;
@@ -182,7 +250,27 @@ function signPopup(s) {
 
 // ------------------------------------------------------------------ render
 
+function setInput(id, value) { // don't fight someone mid-edit
+  const el = document.getElementById(id);
+  if (el !== document.activeElement && el.value !== value) el.value = value;
+}
+
 function renderControls() {
+  const trip = state.mode === "trip";
+  for (const b of document.querySelectorAll(".mode-btn")) b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode));
+  document.getElementById("moment-controls").hidden = trip;
+  document.getElementById("trip-controls").hidden = !trip;
+  document.getElementById("legend-now").textContent = trip ? "Cleaning while you're away" : "Cleaning now: don't park";
+  document.getElementById("legend-clear").textContent = trip ? "Clear the whole time" : "No more cleaning this day";
+  document.getElementById("legend-later-row").hidden = trip;
+  if (state.trip) {
+    const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    setInput("trip-from-date", state.trip.from.date);
+    setInput("trip-from-time", hhmm(state.trip.from.minutes));
+    setInput("trip-to-date", state.trip.to.date);
+    setInput("trip-to-time", hhmm(state.trip.to.minutes));
+  }
+
   const today = hobokenNow().date;
   const days = document.getElementById("days");
   days.innerHTML = "";
@@ -221,27 +309,72 @@ function renderControls() {
 function render() {
   if (!curbs || !map || !map.getSource("curbs")) return;
   renderControls();
+  const trip = state.mode === "trip";
+  const valid = !trip || tripValid(state.trip);
   const counts = { now: 0, later: 0, clear: 0, none: 0 };
   for (const f of curbs.features) {
-    const st = statusFor(curbProps.get(f.properties.id).rules, state.date, state.minutes);
+    const rules = curbProps.get(f.properties.id).rules;
+    const st = !valid ? "none" : trip ? tripStatus(rules, state.trip) : statusFor(rules, state.date, state.minutes);
     f.properties.status = st;
     if (f.properties.side) counts[st]++;
   }
   map.getSource("curbs").setData(curbs);
+  map.setLayoutProperty("signs", "visibility", state.showSigns ? "visible" : "none");
+  if (trip) renderTrip(valid, counts);
+  else renderMoment(counts);
+  if (popup && popup.isOpen() && popup._hpRender) popup.setHTML(popup._hpRender());
+}
+
+function setSigns(list, isActive) {
+  map.getSource("signs").setData({
+    type: "FeatureCollection",
+    features: list.map((s) => ({
+      type: "Feature", geometry: { type: "Point", coordinates: [s.lon, s.lat] },
+      properties: { id: s.id, active: isActive(s) },
+    })),
+  });
+}
+
+const andList = (xs) => xs.length < 3 ? xs.join(" and ") : `${xs.slice(0, -1).join("; ")}; and ${xs[xs.length - 1]}`;
+
+function renderTrip(valid, counts) {
+  const t = state.trip;
+  const banner = document.getElementById("banner");
+  banner.classList.toggle("warn", !valid);
+  if (!valid) {
+    setSigns([], () => false);
+    banner.hidden = false;
+    banner.textContent = "Pick a return time after you park.";
+    document.getElementById("summary").textContent = "";
+    document.getElementById("signs-count").textContent = "";
+    return;
+  }
+  const during = signs.filter((s) => signDuringTrip(s, t));
+  setSigns(during, () => true);
+  document.getElementById("signs-count").textContent = signs.length ? `(${during.length} during your trip)` : "";
+
+  const hols = tripHolidays(t);
+  const tooLong = addDays(t.from.date, MAX_TRIP_DAYS) <= t.to.date;
+  banner.hidden = !(hols.length || tooLong);
+  banner.classList.toggle("warn", tooLong);
+  banner.textContent = tooLong ? "Only the first two months of a trip are checked."
+    : hols.length ? `No street cleaning on ${andList(hols.map((d) => `${fmtDate(d)} (${holidays.get(d)})`))}.` : "";
+
+  document.getElementById("summary").innerHTML =
+    `${esc(fmtWhen(t.from))} → ${esc(fmtWhen(t.to))}: <b>${counts.clear}</b> curb sides are clear the whole time, ` +
+    `<b>${counts.now}</b> get cleaned while you're away.` +
+    `<span class="note" style="display:block;margin-top:4px">New no-parking signs can go up with as little as 3 days' notice, so signs booked after you park won't show here.</span>`;
+}
+
+function renderMoment(counts) {
+  const banner = document.getElementById("banner");
+  banner.classList.remove("warn");
 
   const onDay = signs.filter((s) => signOnDate(s, state.date));
   const activeNow = onDay.filter((s) => signActiveAt(s, state.minutes)).length;
-  map.getSource("signs").setData({
-    type: "FeatureCollection",
-    features: onDay.map((s) => ({
-      type: "Feature", geometry: { type: "Point", coordinates: [s.lon, s.lat] },
-      properties: { id: s.id, active: signActiveAt(s, state.minutes) },
-    })),
-  });
-  map.setLayoutProperty("signs", "visibility", state.showSigns ? "visible" : "none");
+  setSigns(onDay, (s) => signActiveAt(s, state.minutes));
   document.getElementById("signs-count").textContent = signs.length ? `(${activeNow} now, ${onDay.length} this day)` : "";
 
-  const banner = document.getElementById("banner");
   const hol = holidays.get(state.date);
   const weekend = isoDow(state.date) >= 6;
   banner.hidden = !(hol || weekend);
@@ -252,19 +385,56 @@ function render() {
   document.getElementById("summary").innerHTML = hol || weekend
     ? `${esc(when)}: no curbs being cleaned.`
     : `${esc(when)}: <b>${counts.now}</b> curb sides being cleaned, <b>${counts.later}</b> later this day.`;
-
-  if (popup && popup.isOpen() && popup._hpRender) popup.setHTML(popup._hpRender());
 }
 
 // --------------------------------------------------------------------- map
+
+// Curb sides are drawn this many pixels off the centerline, by zoom.
+const OFFSET_STOPS = [[13, 1.2], [15, 2.5], [17, 5], [19, 11]];
+
+function offsetAt(zoom) {
+  if (zoom <= OFFSET_STOPS[0][0]) return OFFSET_STOPS[0][1];
+  for (let i = 1; i < OFFSET_STOPS.length; i++) {
+    const [z1, v1] = OFFSET_STOPS[i], [z0, v0] = OFFSET_STOPS[i - 1];
+    if (zoom <= z1) return v0 + ((zoom - z0) / (z1 - z0)) * (v1 - v0);
+  }
+  return OFFSET_STOPS[OFFSET_STOPS.length - 1][1];
+}
+
+// Screen distance from a point to a curb side as drawn (offset included).
+function curbDistance(id, pt) {
+  const off = curbProps.get(id).side ? offsetAt(map.getZoom()) : 0;
+  const px = curbCoords.get(id).map((c) => map.project(c));
+  let best = Infinity;
+  for (let i = 0; i + 1 < px.length; i++) {
+    const dx = px[i + 1].x - px[i].x, dy = px[i + 1].y - px[i].y, len = Math.hypot(dx, dy) || 1;
+    const nx = (-dy / len) * off, ny = (dx / len) * off; // right of the direction of travel, on screen
+    const ax = px[i].x + nx, ay = px[i].y + ny;
+    const k = Math.max(0, Math.min(1, ((pt.x - ax) * dx + (pt.y - ay) * dy) / (len * len)));
+    best = Math.min(best, Math.hypot(pt.x - ax - k * dx, pt.y - ay - k * dy));
+  }
+  return best;
+}
+
+// The curb side drawn closest to a tap; both sides of a narrow street are
+// within finger range, so the topmost hit isn't good enough.
+function curbAt(pt) {
+  const box = [[pt.x - 12, pt.y - 12], [pt.x + 12, pt.y + 12]];
+  const ids = [...new Set(map.queryRenderedFeatures(box, { layers: ["curbs-hit"] }).map((f) => f.properties.id))];
+  let best = null, bestD = 14;
+  for (const id of ids) {
+    const d = curbDistance(id, pt);
+    if (d < bestD) { best = id; bestD = d; }
+  }
+  return best;
+}
 
 function addLayers() {
   map.addSource("curbs", { type: "geojson", data: curbs });
   map.addSource("signs", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
 
   const isSide = ["!=", ["get", "side"], null];
-  const offset = ["interpolate", ["linear"], ["zoom"],
-    13, ["case", isSide, 1.2, 0], 15, ["case", isSide, 2.5, 0], 17, ["case", isSide, 5, 0], 19, ["case", isSide, 11, 0]];
+  const offset = ["interpolate", ["linear"], ["zoom"], ...OFFSET_STOPS.flatMap(([z, px]) => [z, ["case", isSide, px, 0]])];
   const color = ["match", ["get", "status"], "now", COLORS.now, "later", COLORS.later, "clear", COLORS.clear, COLORS.none];
 
   map.addLayer({
@@ -304,8 +474,8 @@ function addLayers() {
       const s = signs.find((x) => x.id === sign.properties.id);
       if (s) return openPopup([s.lon, s.lat], () => signPopup(s));
     }
-    const curb = map.queryRenderedFeatures(e.point, { layers: ["curbs-hit"] })[0];
-    if (curb) openPopup(e.lngLat, () => curbPopup(curbProps.get(curb.properties.id)));
+    const id = curbAt(e.point);
+    if (id) openPopup(e.lngLat, () => curbPopup(curbProps.get(id)));
   });
   for (const layer of ["signs", "curbs-hit"]) {
     map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
@@ -381,6 +551,7 @@ async function init() {
   for (const h of hol.holidays) holidays.set(h.date, h.name);
   curbs = { type: "FeatureCollection", features: geo.features.map((f) => {
     curbProps.set(f.properties.id, f.properties);
+    curbCoords.set(f.properties.id, f.geometry.coordinates);
     return { type: "Feature", geometry: f.geometry, properties: { id: f.properties.id, side: f.properties.side, status: "none" } };
   }) };
   if (meta.built_at) {
@@ -396,6 +567,29 @@ async function init() {
   document.getElementById("now-btn").addEventListener("click", () => {
     const n = hobokenNow(); state.date = n.date; state.minutes = n.minutes; state.live = true; render();
   });
+  for (const b of document.querySelectorAll(".mode-btn")) {
+    b.addEventListener("click", () => {
+      state.mode = b.dataset.mode;
+      if (state.mode === "trip" && !state.trip) { // default: park now, back tomorrow at the same time
+        const n = hobokenNow(), m = Math.ceil(n.minutes / 15) * 15 % 1440;
+        state.trip = { from: { date: n.date, minutes: m }, to: { date: addDays(n.date, 1), minutes: m } };
+      }
+      render();
+    });
+  }
+  const readTrip = () => {
+    const val = (id) => document.getElementById(id).value;
+    const mins = (v) => { const [h, m] = v.split(":").map(Number); return h * 60 + m; };
+    if (!val("trip-from-date") || !val("trip-to-date") || !val("trip-from-time") || !val("trip-to-time")) return;
+    state.trip = {
+      from: { date: val("trip-from-date"), minutes: mins(val("trip-from-time")) },
+      to: { date: val("trip-to-date"), minutes: mins(val("trip-to-time")) },
+    };
+    render();
+  };
+  for (const id of ["trip-from-date", "trip-from-time", "trip-to-date", "trip-to-time"]) {
+    document.getElementById(id).addEventListener("change", readTrip);
+  }
   document.getElementById("signs-toggle").addEventListener("change", (e) => { state.showSigns = e.target.checked; render(); });
   const panel = document.getElementById("panel");
   document.getElementById("collapse-btn").addEventListener("click", (e) => {
@@ -404,7 +598,7 @@ async function init() {
     e.target.setAttribute("aria-expanded", String(!collapsed));
   });
   setInterval(() => {
-    if (!state.live) return;
+    if (!state.live || state.mode !== "moment") return;
     const n = hobokenNow(); state.date = n.date; state.minutes = n.minutes; render();
   }, 60 * 1000);
 

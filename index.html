@@ -20,21 +20,40 @@
     </header>
 
     <div id="panel-body" class="panel-body">
-      <div class="days" id="days" role="group" aria-label="Day"></div>
+      <div class="modes" role="group" aria-label="What to check">
+        <button type="button" class="mode-btn" data-mode="moment" aria-pressed="true">Day &amp; time</button>
+        <button type="button" class="mode-btn" data-mode="trip" aria-pressed="false">Leaving my car</button>
+      </div>
 
-      <div class="time-row">
-        <label for="time" class="time-label" id="time-text">--</label>
-        <input type="range" id="time" min="0" max="1425" step="15" aria-describedby="time-text">
-        <button id="now-btn" class="chip" type="button">Now</button>
+      <div id="moment-controls">
+        <div class="days" id="days" role="group" aria-label="Day"></div>
+        <div class="time-row">
+          <label for="time" class="time-label" id="time-text">--</label>
+          <input type="range" id="time" min="0" max="1425" step="15" aria-describedby="time-text">
+          <button id="now-btn" class="chip" type="button">Now</button>
+        </div>
+      </div>
+
+      <div id="trip-controls" class="trip" hidden>
+        <div class="trip-row">
+          <label for="trip-from-date">Park</label>
+          <input type="date" id="trip-from-date" aria-label="Date you park">
+          <input type="time" id="trip-from-time" step="900" aria-label="Time you park">
+        </div>
+        <div class="trip-row">
+          <label for="trip-to-date">Back</label>
+          <input type="date" id="trip-to-date" aria-label="Date you're back">
+          <input type="time" id="trip-to-time" step="900" aria-label="Time you're back">
+        </div>
       </div>
 
       <div id="banner" class="banner" role="status" hidden></div>
       <p id="summary" class="summary" aria-live="polite"></p>
 
       <ul class="legend">
-        <li><span class="sw now"></span>Cleaning now: don't park</li>
-        <li><span class="sw later"></span>Cleaning later this day</li>
-        <li><span class="sw clear"></span>No more cleaning this day</li>
+        <li><span class="sw now"></span><span id="legend-now">Cleaning now: don't park</span></li>
+        <li id="legend-later-row"><span class="sw later"></span>Cleaning later this day</li>
+        <li><span class="sw clear"></span><span id="legend-clear">No more cleaning this day</span></li>
         <li><span class="sw none"></span>No schedule listed</li>
         <li class="legend-signs">
           <label><input type="checkbox" id="signs-toggle" checked>
