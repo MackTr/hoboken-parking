@@ -1,6 +1,5 @@
 :root {
-  --now: #dc2626;
-  --later: #f59e0b;
+  --clean: #dc2626;
   --clear: #16a34a;
   --none: #9ca3af;
   --sign: #7c3aed;
@@ -50,7 +49,7 @@ h1 { font-size: 17px; margin: 0 0 10px; letter-spacing: -0.01em; }
 .banner.warn { background: #fffbeb; border-color: #fde68a; color: #78350f; }
 .note { font-size: 12px; color: var(--muted); margin: -2px 0 8px; }
 
-.days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 6px; scrollbar-width: thin; }
 .chip {
   flex: 0 0 auto;
   border: 1px solid var(--line);
@@ -71,9 +70,6 @@ h1 { font-size: 17px; margin: 0 0 10px; letter-spacing: -0.01em; }
 .date-chip { position: relative; display: inline-flex; align-items: center; }
 .date-chip input { font: inherit; font-size: 12px; border: 0; background: transparent; color: inherit; width: 112px; }
 
-.time-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 6px; }
-.time-label { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 64px; font-size: 15px; }
-.time-row input[type="range"] { flex: 1; accent-color: var(--ink); min-width: 0; }
 
 .banner {
   background: #ecfdf5;
@@ -91,8 +87,7 @@ h1 { font-size: 17px; margin: 0 0 10px; letter-spacing: -0.01em; }
 .legend li, .legend label { display: flex; align-items: center; gap: 8px; }
 .legend label { cursor: pointer; }
 .sw { width: 22px; height: 5px; border-radius: 3px; flex: 0 0 auto; }
-.sw.now { background: var(--now); }
-.sw.later { background: var(--later); }
+.sw.clean { background: var(--clean); }
 .sw.clear { background: var(--clear); }
 .sw.none { background: var(--none); }
 .sw-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--sign); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--sign); margin: 0 5px; flex: 0 0 auto; }
@@ -110,8 +105,7 @@ a { color: var(--accent); }
 .pop .block { color: var(--muted); margin: 0 0 6px; }
 .pop .row { margin: 2px 0; }
 .pop .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; color: #fff; margin-bottom: 4px; }
-.pop .tag.now { background: var(--now); }
-.pop .tag.later { background: var(--later); color: #422006; }
+.pop .tag.clean { background: var(--clean); }
 .pop .tag.clear { background: var(--clear); }
 .pop .tag.none { background: var(--none); }
 .pop .tag.sign { background: var(--sign); }

@@ -2,7 +2,8 @@
 
 A one-page map that shows, for any day and time, which Hoboken curbs you can park on:
 
-- **Street cleaning** for each side of each block, colored red (cleaning now), orange (later that day), green (no more cleaning that day) or gray (no schedule listed). Tap a curb to see its weekly schedule and when you'd next have to move.
+- **Street cleaning** for each side of each block on the day you pick: red if it gets cleaned that day, green if not, gray if no schedule is listed. Zoom in to see each red curb's cleaning time written next to it; tap a curb for its weekly schedule.
+- **Leaving my car:** enter when you park and when you're back to see which curbs stay clear the whole time.
 - **City holidays**, when street cleaning is suspended.
 - **Temporary no-parking signs** (moving, construction, events, film shoots), loaded live from the city.
 

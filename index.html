@@ -21,17 +21,12 @@
 
     <div id="panel-body" class="panel-body">
       <div class="modes" role="group" aria-label="What to check">
-        <button type="button" class="mode-btn" data-mode="moment" aria-pressed="true">Day &amp; time</button>
+        <button type="button" class="mode-btn" data-mode="day" aria-pressed="true">By day</button>
         <button type="button" class="mode-btn" data-mode="trip" aria-pressed="false">Leaving my car</button>
       </div>
 
-      <div id="moment-controls">
+      <div id="day-controls">
         <div class="days" id="days" role="group" aria-label="Day"></div>
-        <div class="time-row">
-          <label for="time" class="time-label" id="time-text">--</label>
-          <input type="range" id="time" min="0" max="1425" step="15" aria-describedby="time-text">
-          <button id="now-btn" class="chip" type="button">Now</button>
-        </div>
       </div>
 
       <div id="trip-controls" class="trip" hidden>
@@ -51,9 +46,8 @@
       <p id="summary" class="summary" aria-live="polite"></p>
 
       <ul class="legend">
-        <li><span class="sw now"></span><span id="legend-now">Cleaning now: don't park</span></li>
-        <li id="legend-later-row"><span class="sw later"></span>Cleaning later this day</li>
-        <li><span class="sw clear"></span><span id="legend-clear">No more cleaning this day</span></li>
+        <li><span class="sw clean"></span><span id="legend-clean">Street cleaning this day</span></li>
+        <li><span class="sw clear"></span><span id="legend-clear">No cleaning this day</span></li>
         <li><span class="sw none"></span>No schedule listed</li>
         <li class="legend-signs">
           <label><input type="checkbox" id="signs-toggle" checked>
