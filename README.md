@@ -3,6 +3,7 @@
 A one-page map that shows which Hoboken curbs you can park on, for a given day or for the whole time you're away:
 
 - **Street cleaning** for each side of each block on the day you pick: red if it gets cleaned that day, green if not, gray if no schedule is listed. Zoom in to see each red curb's cleaning time written next to it; tap a curb for its weekly schedule.
+- **One-way arrows** down the middle of each one-way street once you zoom in, and each curb's popup says whether its street is one-way and which direction.
 - **Leaving my car:** enter when you park and when you're back to see which curbs stay clear the whole time.
 - **City holidays**, when street cleaning is suspended.
 - **Temporary no-parking signs** (moving, construction, events, film shoots), loaded live from the city.
@@ -32,6 +33,7 @@ GitHub pauses scheduled workflows after 60 days with no commits to the repo. If 
 | Current schedule | [hobokennj.gov street cleaning schedule](https://www.hobokennj.gov/resources/street-cleaning-schedule) | Scraped on each build |
 | Holidays | [hobokennj.gov holiday schedule](https://www.hobokennj.gov/holiday-schedule) | Scraped on each build (built-in 2026 fallback) |
 | No-parking signs | The city's [sign map](https://hpuvp.hobokennj.gov/parking) API | Live in the browser; `data/tnp_snapshot.json` is the fallback |
+| One-way directions | [OpenStreetMap](https://www.openstreetmap.org/), through the OpenFreeMap basemap tiles | As current as the basemap. The city's 2019 layer disagrees on about 1 block in 10, mostly streets changed since (e.g. Sinatra Dr went one-way northbound in 2022) |
 
 `scripts/build_data.py` places each row of the city's schedule table ("Willow Ave. to Jackson St.") onto the GIS block segments. **Where the table and the 2019 GIS layer disagree, the table wins**, and the curb's popup shows a warning with the older value. A few blocks the table doesn't list keep their GIS schedule; those popups say so too.
 

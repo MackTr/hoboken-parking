@@ -12,7 +12,7 @@ const REASONS = { MOVING: "Moving", CONSTRUCTION: "Construction", EVENT: "Event"
 // mode "day": one date; a curb is red if it's cleaned at any time that day.
 // mode "trip": the car sits from trip.from to trip.to (each {date, minutes})
 // and a curb is red if any cleaning falls in between.
-const state = { mode: "day", date: null, showSigns: true, trip: null };
+const state = { mode: "day", date: null, showSigns: true, showArrows: true, trip: null };
 let curbs = null;            // FeatureCollection sent to the map (id, side, status only)
 const curbProps = new Map(); // id -> full properties (rules, block, source)
 const curbCoords = new Map(); // id -> [lon, lat][]
@@ -243,6 +243,8 @@ function curbPopup(p) {
   const block = [p.from, p.to].filter((x) => x && x !== "end").join(" → ") || "";
   let html = `<div class="pop"><span class="tag ${status}">${(trip ? TRIP_STATUS_TEXT : DAY_STATUS_TEXT)[status]}</span>
     <h3>${esc(p.street)}${side ? " · " + side : ""}</h3>${block ? `<p class="block">${esc(block)}</p>` : ""}`;
+  const dir = trafficDirection(p.id);
+  if (dir) html += `<div class="row"><b>Traffic:</b> ${dir}</div>`;
   if (p.rules.length) {
     html += `<div class="row"><b>Street cleaning:</b> ${p.rules.map(fmtRule).join("; ")}</div>` + (trip ? tripRows(p) : dayRows(p));
   } else {
@@ -370,6 +372,7 @@ function render() {
   map.getSource("curbs").setData(curbs);
   map.getSource("curb-labels").setData({ type: "FeatureCollection", features: labels });
   map.setLayoutProperty("signs", "visibility", state.showSigns ? "visible" : "none");
+  map.setLayoutProperty("oneway-arrows", "visibility", state.showArrows ? "visible" : "none");
   if (trip) renderTrip(valid, counts);
   else renderDay(counts);
   if (popup && popup.isOpen() && popup._hpRender) popup.setHTML(popup._hpRender());
@@ -472,7 +475,7 @@ function buildLabelAnchors() {
 }
 
 // Curb sides are drawn this many pixels off the centerline, by zoom.
-const OFFSET_STOPS = [[13, 1.2], [15, 2.5], [17, 5], [19, 11]];
+const OFFSET_STOPS = [[13, 1.2], [15, 3], [17, 6.5], [19, 13]];
 
 function offsetAt(zoom) {
   if (zoom <= OFFSET_STOPS[0][0]) return OFFSET_STOPS[0][1];
@@ -511,6 +514,58 @@ function curbAt(pt) {
   return best;
 }
 
+// ----------------------------------------------------------- one-way streets
+// Direction comes from OpenStreetMap through the basemap tiles (layer
+// "transportation", oneway = 1 along the line, -1 against it). It's more
+// current than the city's 2019 layer, e.g. Sinatra Dr's 2022 one-way change.
+
+const STREET_CLASSES = ["trunk", "primary", "secondary", "tertiary", "minor"];
+
+function arrowImage() {
+  const r = 2, w = 20 * r, h = 10 * r, c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  const draw = (color, width) => {
+    g.strokeStyle = color; g.fillStyle = color; g.lineWidth = width; g.lineCap = "round"; g.lineJoin = "round";
+    g.beginPath(); g.moveTo(2.5 * r, h / 2); g.lineTo(12 * r, h / 2); g.stroke();
+    g.beginPath(); g.moveTo(11 * r, 2 * r); g.lineTo(17.5 * r, h / 2); g.lineTo(11 * r, h - 2 * r); g.closePath(); g.fill(); g.stroke();
+  };
+  draw("rgba(255,255,255,0.9)", 3 * r); // thin halo so arrows read over the map
+  draw("#1f2937", 1.6 * r);
+  return { image: g.getImageData(0, 0, w, h), pixelRatio: r };
+}
+
+// "One-way, northbound" / "Two-way" for the street a curb is on, read from
+// the street drawn under the middle of that block; null if it isn't on screen.
+function trafficDirection(id) {
+  if (!map.getLayer("street-dir")) return null;
+  const coords = curbCoords.get(id);
+  const a = coords[0], b = coords[coords.length - 1];
+  const k = Math.cos((40.745 * Math.PI) / 180);
+  const cdx = (b[0] - a[0]) * k, cdy = b[1] - a[1], clen = Math.hypot(cdx, cdy) || 1;
+  const mid = map.project([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+  const box = [[mid.x - 14, mid.y - 14], [mid.x + 14, mid.y + 14]];
+  let best = null;
+  for (const f of map.queryRenderedFeatures(box, { layers: ["street-dir"] })) {
+    const lines = f.geometry.type === "MultiLineString" ? f.geometry.coordinates : [f.geometry.coordinates];
+    for (const line of lines) {
+      for (let i = 0; i + 1 < line.length; i++) {
+        const dx = (line[i + 1][0] - line[i][0]) * k, dy = line[i + 1][1] - line[i][1], len = Math.hypot(dx, dy) || 1;
+        if (Math.abs((dx * cdx + dy * cdy) / (len * clen)) < 0.85) continue; // a cross street, not this one
+        const p0 = map.project(line[i]), p1 = map.project(line[i + 1]);
+        const d = Math.min(Math.hypot(p0.x - mid.x, p0.y - mid.y), Math.hypot(p1.x - mid.x, p1.y - mid.y),
+          Math.abs((p1.x - p0.x) * (p0.y - mid.y) - (p0.x - mid.x) * (p1.y - p0.y)) / (Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1));
+        if (!best || d < best.d) best = { d, dx, dy, oneway: f.properties.oneway };
+      }
+    }
+  }
+  if (!best) return null;
+  if (best.oneway !== 1 && best.oneway !== -1) return "Two-way";
+  const sx = best.dx * best.oneway, sy = best.dy * best.oneway;
+  const heading = Math.abs(sy) > Math.abs(sx) ? (sy > 0 ? "northbound" : "southbound") : (sx > 0 ? "eastbound" : "westbound");
+  return `One-way, ${heading}`;
+}
+
 function addLayers() {
   map.addSource("curbs", { type: "geojson", data: curbs });
   map.addSource("signs", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -534,6 +589,26 @@ function addLayers() {
     id: "curbs-hit", type: "line", source: "curbs",
     paint: { "line-color": "#000", "line-opacity": 0, "line-width": 16, "line-offset": offset },
   });
+  const streetFilter = ["in", ["get", "class"], ["literal", STREET_CLASSES]];
+  map.addLayer({ // invisible: lets a curb popup look up its street's direction
+    id: "street-dir", type: "line", source: "openmaptiles", "source-layer": "transportation", minzoom: 13,
+    filter: streetFilter, paint: { "line-color": "#000", "line-opacity": 0, "line-width": 10 },
+  });
+  map.addImage("oneway-arrow", arrowImage().image, { pixelRatio: 2 });
+  map.addLayer({ // one-way arrows down the middle of the street
+    id: "oneway-arrows", type: "symbol", source: "openmaptiles", "source-layer": "transportation", minzoom: 15,
+    filter: ["all", streetFilter, ["in", ["get", "oneway"], ["literal", [1, -1]]]],
+    layout: {
+      "symbol-placement": "line",
+      "symbol-spacing": 90,
+      "icon-image": "oneway-arrow",
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.75, 17, 1, 19, 1.3],
+      "icon-rotate": ["case", ["==", ["get", "oneway"], -1], 180, 0],
+      "icon-rotation-alignment": "map",
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    },
+  });
   map.addLayer({ // cleaning time next to each red curb, once zoomed in enough to read
     id: "curb-labels", type: "symbol", source: "curb-labels", minzoom: 15.5,
     layout: {
@@ -542,7 +617,7 @@ function addLayers() {
       "text-size": ["interpolate", ["linear"], ["zoom"], 15.5, 10, 18, 13],
       "text-rotate": ["get", "angle"],
       "text-rotation-alignment": "map",
-      "text-offset": ["case", ["get", "below"], ["literal", [0, 1.1]], ["literal", [0, -1.1]]],
+      "text-offset": ["case", ["get", "below"], ["literal", [0, 1.35]], ["literal", [0, -1.35]]],
       "text-padding": 4,
     },
     paint: { "text-color": "#991b1b", "text-halo-color": "#ffffff", "text-halo-width": 1.8 },
@@ -691,6 +766,7 @@ async function init() {
     });
   }
   document.getElementById("signs-toggle").addEventListener("change", (e) => { state.showSigns = e.target.checked; render(); });
+  document.getElementById("arrows-toggle").addEventListener("change", (e) => { state.showArrows = e.target.checked; render(); });
   const panel = document.getElementById("panel");
   document.getElementById("collapse-btn").addEventListener("click", (e) => {
     const collapsed = panel.classList.toggle("collapsed");

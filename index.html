@@ -74,6 +74,11 @@
         <span class="sw-dot" aria-hidden="true"></span>
         <span>No-parking signs <span id="signs-count" class="muted"></span></span>
       </label>
+      <label class="signs-toggle">
+        <input type="checkbox" id="arrows-toggle" checked>
+        <svg class="arrow-key" viewBox="0 0 22 14" aria-hidden="true"><path d="M3 7h10" stroke="#334155" stroke-width="2" stroke-linecap="round"/><path d="M12 3l7 4-7 4z" fill="#334155" stroke="#334155" stroke-width="2" stroke-linejoin="round"/></svg>
+        <span>One-way arrows <span class="muted">(zoom in)</span></span>
+      </label>
 
       <details class="about">
         <summary>About this data</summary>
@@ -82,6 +87,7 @@
             <a id="src-schedule" href="https://www.hobokennj.gov/resources/street-cleaning-schedule" target="_blank" rel="noopener">street cleaning schedule</a>,
             placed on the city's GIS street map. Where the two disagree, the schedule page wins and the curb's popup says so.</li>
           <li>Street cleaning is suspended on <a href="https://www.hobokennj.gov/holiday-schedule" target="_blank" rel="noopener">city holidays</a>.</li>
+          <li>One-way arrows come from <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a>, which is more current than the city's 2019 street map (it has Sinatra Drive's 2022 one-way change, for example).</li>
           <li>Signs come from the city's <a href="https://hpuvp.hobokennj.gov/parking" target="_blank" rel="noopener">temporary no-parking map</a>. <span id="signs-source"></span></li>
           <li id="built-at"></li>
         </ul>

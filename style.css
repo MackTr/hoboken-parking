@@ -136,6 +136,8 @@ h1 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
 .hint .sw-gray { display: inline-block; width: 14px; height: 4px; border-radius: 2px; background: var(--none); vertical-align: middle; margin-right: 3px; }
 
 .signs-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.signs-toggle + .signs-toggle { margin-top: -6px; }
+.arrow-key { width: 16px; height: 12px; flex: 0 0 auto; }
 .signs-toggle input { margin: 0; accent-color: var(--sign); }
 .sw-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--sign); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--sign); flex: 0 0 auto; }
 
