@@ -31,29 +31,49 @@
 
       <div id="trip-controls" class="trip" hidden>
         <div class="trip-row">
-          <label for="trip-from-date">Park</label>
-          <input type="date" id="trip-from-date" aria-label="Date you park">
-          <input type="time" id="trip-from-time" step="900" aria-label="Time you park">
+          <span class="trip-label">Park</span>
+          <label class="field">
+            <span class="field-text" id="trip-from-date-text"></span>
+            <input type="date" id="trip-from-date" aria-label="Date you park">
+          </label>
+          <label class="field field-time">
+            <span class="field-text" id="trip-from-time-text"></span>
+            <input type="time" id="trip-from-time" step="900" aria-label="Time you park">
+          </label>
         </div>
         <div class="trip-row">
-          <label for="trip-to-date">Back</label>
-          <input type="date" id="trip-to-date" aria-label="Date you're back">
-          <input type="time" id="trip-to-time" step="900" aria-label="Time you're back">
+          <span class="trip-label">Back</span>
+          <label class="field" id="trip-to-date-field">
+            <span class="field-text" id="trip-to-date-text"></span>
+            <input type="date" id="trip-to-date" aria-label="Date you're back">
+          </label>
+          <label class="field field-time" id="trip-to-time-field">
+            <span class="field-text" id="trip-to-time-text"></span>
+            <input type="time" id="trip-to-time" step="900" aria-label="Time you're back">
+          </label>
         </div>
+        <div class="durations" role="group" aria-label="Away for">
+          <button type="button" class="chip chip-sm" data-days="1">1 day</button>
+          <button type="button" class="chip chip-sm" data-days="2">2 days</button>
+          <button type="button" class="chip chip-sm" data-days="3">3 days</button>
+          <button type="button" class="chip chip-sm" data-days="7">1 week</button>
+        </div>
+        <p class="trip-length" id="trip-length" aria-live="polite"></p>
       </div>
 
       <div id="banner" class="banner" role="status" hidden></div>
-      <p id="summary" class="summary" aria-live="polite"></p>
 
-      <ul class="legend">
-        <li><span class="sw clean"></span><span id="legend-clean">Street cleaning this day</span></li>
-        <li><span class="sw clear"></span><span id="legend-clear">No cleaning this day</span></li>
-        <li><span class="sw none"></span>No schedule listed</li>
-        <li class="legend-signs">
-          <label><input type="checkbox" id="signs-toggle" checked>
-            <span class="sw-dot"></span>Temporary no-parking signs <span id="signs-count" class="muted"></span></label>
-        </li>
-      </ul>
+      <div class="stats" aria-live="polite">
+        <div class="stat clean"><span class="stat-num" id="stat-clean">–</span><span class="stat-label" id="stat-clean-label"></span></div>
+        <div class="stat clear"><span class="stat-num" id="stat-clear">–</span><span class="stat-label" id="stat-clear-label"></span></div>
+      </div>
+      <p class="hint" id="hint"></p>
+
+      <label class="signs-toggle">
+        <input type="checkbox" id="signs-toggle" checked>
+        <span class="sw-dot" aria-hidden="true"></span>
+        <span>No-parking signs <span id="signs-count" class="muted"></span></span>
+      </label>
 
       <details class="about">
         <summary>About this data</summary>

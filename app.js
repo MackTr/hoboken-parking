@@ -93,6 +93,14 @@ function nextCleaning(rules, date, minutes) {
 const MAX_TRIP_DAYS = 62;
 const tripValid = (t) => t.from.date < t.to.date || (t.from.date === t.to.date && t.from.minutes < t.to.minutes);
 const fmtWhen = (dt) => `${fmtDate(dt.date)}, ${fmtTime(dt.minutes)}`;
+// {date, minutes} <-> minutes since 1970, for trip lengths and shifting.
+const toAbs = (dt) => utc(dt.date).getTime() / 60000 + dt.minutes;
+const fromAbs = (abs) => ({ date: new Date(abs * 60000).toISOString().slice(0, 10), minutes: ((abs % 1440) + 1440) % 1440 });
+function fmtDuration(mins) {
+  const d = Math.floor(mins / 1440), h = Math.round((mins % 1440) / 60);
+  const parts = [d && `${d} day${d > 1 ? "s" : ""}`, h && `${h} hour${h > 1 ? "s" : ""}`].filter(Boolean);
+  return parts.join(", ") || `${mins} min`;
+}
 
 // Each day of the trip (or of [first, last] within it) with the minutes the car is parked: [lo, hi).
 function* tripDays(t, first = t.from.date, last = t.to.date) {
@@ -266,20 +274,42 @@ function setInput(id, value) { // don't fight someone mid-edit
   if (el !== document.activeElement && el.value !== value) el.value = value;
 }
 
+const CALENDAR_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+
+// Native date/time pickers sit invisibly on top of readable text; clicking
+// anywhere on the field opens the picker where the browser supports it.
+function openPicker(input) {
+  try { input.showPicker(); } catch (_) { /* older browsers open it on their own */ }
+}
+
+function renderTripControls() {
+  const t = state.trip;
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  setInput("trip-from-date", t.from.date);
+  setInput("trip-from-time", hhmm(t.from.minutes));
+  setInput("trip-to-date", t.to.date);
+  setInput("trip-to-time", hhmm(t.to.minutes));
+  document.getElementById("trip-to-date").min = t.from.date;
+  document.getElementById("trip-from-date-text").textContent = fmtDate(t.from.date);
+  document.getElementById("trip-from-time-text").textContent = fmtTime(t.from.minutes);
+  document.getElementById("trip-to-date-text").textContent = fmtDate(t.to.date);
+  document.getElementById("trip-to-time-text").textContent = fmtTime(t.to.minutes);
+
+  const valid = tripValid(t);
+  const length = toAbs(t.to) - toAbs(t.from);
+  for (const id of ["trip-to-date-field", "trip-to-time-field"]) document.getElementById(id).classList.toggle("invalid", !valid);
+  for (const b of document.querySelectorAll(".durations .chip")) b.setAttribute("aria-pressed", String(valid && length === +b.dataset.days * 1440));
+  const note = document.getElementById("trip-length");
+  note.classList.toggle("error", !valid);
+  note.textContent = valid ? `Away ${fmtDuration(length)}` : "Back has to be after you park.";
+}
+
 function renderControls() {
   const trip = state.mode === "trip";
   for (const b of document.querySelectorAll(".mode-btn")) b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode));
   document.getElementById("day-controls").hidden = trip;
   document.getElementById("trip-controls").hidden = !trip;
-  document.getElementById("legend-clean").textContent = (trip ? TRIP_STATUS_TEXT : DAY_STATUS_TEXT).clean;
-  document.getElementById("legend-clear").textContent = (trip ? TRIP_STATUS_TEXT : DAY_STATUS_TEXT).clear;
-  if (state.trip) {
-    const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-    setInput("trip-from-date", state.trip.from.date);
-    setInput("trip-from-time", hhmm(state.trip.from.minutes));
-    setInput("trip-to-date", state.trip.to.date);
-    setInput("trip-to-time", hhmm(state.trip.to.minutes));
-  }
+  if (state.trip) renderTripControls();
 
   const today = hobokenNow().date;
   const days = document.getElementById("days");
@@ -291,24 +321,25 @@ function renderControls() {
     b.className = "chip" + (holidays.has(d) ? " holiday" : "");
     b.setAttribute("aria-pressed", String(d === state.date));
     const label = d === today ? "Today" : DAY[isoDow(d) - 1];
-    b.innerHTML = `${label}<small>${fmtDate(d, { month: "short", day: "numeric" })}</small>`;
+    b.innerHTML = `${label}<small>${holidays.has(d) ? "Holiday" : fmtDate(d, { month: "short", day: "numeric" })}</small>`;
     b.title = holidays.get(d) || fmtDate(d, { weekday: "long", month: "long", day: "numeric" });
     b.onclick = () => { state.date = d; render(); };
     days.appendChild(b);
   }
-  // Any other date
+  // Any other date: a calendar chip that shows the date once one is picked.
+  const off = !week.includes(state.date);
   const wrap = document.createElement("label");
   wrap.className = "chip date-chip";
-  const off = !week.includes(state.date);
   wrap.setAttribute("aria-pressed", String(off));
   wrap.title = "Pick another date";
+  wrap.innerHTML = off ? `${DAY[isoDow(state.date) - 1]}<small>${fmtDate(state.date, { month: "short", day: "numeric" })}</small>` : `${CALENDAR_ICON}<small>More</small>`;
   const input = document.createElement("input");
   input.type = "date";
   input.value = state.date;
   input.setAttribute("aria-label", "Pick another date");
+  input.onclick = () => openPicker(input);
   input.onchange = () => { if (input.value) { state.date = input.value; render(); } };
   wrap.appendChild(input);
-  if (off) { wrap.style.background = "var(--ink)"; wrap.style.color = "#fff"; }
   days.appendChild(wrap);
 }
 
@@ -356,15 +387,21 @@ function setSigns(list, isActive) {
 
 const andList = (xs) => xs.length < 3 ? xs.join(" and ") : `${xs.slice(0, -1).join("; ")}; and ${xs[xs.length - 1]}`;
 
+function renderStats(counts, cleanLabel, clearLabel, hint) {
+  document.getElementById("stat-clean").textContent = counts ? counts.clean : "–";
+  document.getElementById("stat-clear").textContent = counts ? counts.clear : "–";
+  document.getElementById("stat-clean-label").textContent = cleanLabel;
+  document.getElementById("stat-clear-label").textContent = clearLabel;
+  document.getElementById("hint").innerHTML = hint + ' <span class="sw-gray"></span>Gray: no schedule listed.';
+}
+
 function renderTrip(valid, counts) {
   const t = state.trip;
   const banner = document.getElementById("banner");
-  banner.classList.toggle("warn", !valid);
   if (!valid) {
     setSigns([], () => false);
-    banner.hidden = false;
-    banner.textContent = "Pick a return time after you park.";
-    document.getElementById("summary").textContent = "";
+    banner.hidden = true;
+    renderStats(null, "cleaned while you're away", "clear the whole time", "Pick when you're back to see results.");
     document.getElementById("signs-count").textContent = "";
     return;
   }
@@ -379,10 +416,8 @@ function renderTrip(valid, counts) {
   banner.textContent = tooLong ? "Only the first two months of a trip are checked."
     : hols.length ? `No street cleaning on ${andList(hols.map((d) => `${fmtDate(d)} (${holidays.get(d)})`))}.` : "";
 
-  document.getElementById("summary").innerHTML =
-    `${esc(fmtWhen(t.from))} → ${esc(fmtWhen(t.to))}: <b>${counts.clear}</b> curb sides are clear the whole time, ` +
-    `<b>${counts.clean}</b> get cleaned while you're away. Zoom in to see when.` +
-    `<span class="note" style="display:block;margin-top:4px">New no-parking signs can go up with as little as 3 days' notice, so signs booked after you park won't show here.</span>`;
+  renderStats(counts, "curb sides cleaned while you're away", "curb sides clear the whole time",
+    "Zoom in to see each red curb's first cleaning. New no-parking signs can go up on 3 days' notice, so check again before you leave.");
 }
 
 function renderDay(counts) {
@@ -399,10 +434,9 @@ function renderDay(counts) {
   banner.textContent = hol ? `${hol}: street cleaning is suspended all day.`
     : weekend ? "No street cleaning on weekends." : "";
 
-  const when = state.date === hobokenNow().date ? `Today (${fmtDate(state.date)})` : fmtDate(state.date, { weekday: "long", month: "short", day: "numeric" });
-  document.getElementById("summary").innerHTML = hol || weekend
-    ? `${esc(when)}: no street cleaning anywhere.`
-    : `${esc(when)}: <b>${counts.clean}</b> curb sides have street cleaning. Zoom in to see each block's time.`;
+  const day = fmtDate(state.date, { weekday: "long" });
+  renderStats(counts, `curb sides cleaned ${state.date === hobokenNow().date ? "today" : "on " + day}`, "curb sides with no cleaning",
+    hol || weekend ? "" : "Zoom in to see each red curb's cleaning time.");
 }
 
 // --------------------------------------------------------------------- map
@@ -633,18 +667,28 @@ async function init() {
       render();
     });
   }
-  const readTrip = () => {
+  const readTrip = (e) => {
     const val = (id) => document.getElementById(id).value;
     const mins = (v) => { const [h, m] = v.split(":").map(Number); return h * 60 + m; };
     if (!val("trip-from-date") || !val("trip-to-date") || !val("trip-from-time") || !val("trip-to-time")) return;
-    state.trip = {
-      from: { date: val("trip-from-date"), minutes: mins(val("trip-from-time")) },
-      to: { date: val("trip-to-date"), minutes: mins(val("trip-to-time")) },
-    };
+    const prev = state.trip;
+    const from = { date: val("trip-from-date"), minutes: mins(val("trip-from-time")) };
+    let to = { date: val("trip-to-date"), minutes: mins(val("trip-to-time")) };
+    // Moving "Park" moves "Back" with it, so the trip keeps its length.
+    if (e.target.id.startsWith("trip-from") && prev && tripValid(prev)) to = fromAbs(toAbs(from) + toAbs(prev.to) - toAbs(prev.from));
+    state.trip = { from, to };
     render();
   };
   for (const id of ["trip-from-date", "trip-from-time", "trip-to-date", "trip-to-time"]) {
-    document.getElementById(id).addEventListener("change", readTrip);
+    const input = document.getElementById(id);
+    input.addEventListener("change", readTrip);
+    input.addEventListener("click", () => openPicker(input));
+  }
+  for (const b of document.querySelectorAll(".durations .chip")) {
+    b.addEventListener("click", () => {
+      state.trip = { from: state.trip.from, to: fromAbs(toAbs(state.trip.from) + +b.dataset.days * 1440) };
+      render();
+    });
   }
   document.getElementById("signs-toggle").addEventListener("change", (e) => { state.showSigns = e.target.checked; render(); });
   const panel = document.getElementById("panel");
